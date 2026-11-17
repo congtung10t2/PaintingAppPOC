@@ -30,6 +30,7 @@ struct PaintingScreen: View {
     @State private var history: [HistoryEntry] = []
     @State private var saveMessage: String?
     @State private var strokesLayerCGImage: CGImage?
+    @State private var renderGeneration: Int = 0
 
     private let palette: [Color] = [
         .red, .orange, .yellow, .green, .mint, .blue, .purple, .pink, .brown, .black, .white
@@ -260,12 +261,16 @@ struct PaintingScreen: View {
             .onAppear {
                 if canvasContainerSize != geo.size {
                     canvasContainerSize = geo.size
+                    strokesLayerCGImage = nil
+                    renderGeneration += 1
                     rebuildStrokesLayer()
                 }
             }
             .onChange(of: geo.size) { _, newSize in
                 guard canvasContainerSize != newSize else { return }
                 canvasContainerSize = newSize
+                strokesLayerCGImage = nil
+                renderGeneration += 1
                 rebuildStrokesLayer()
             }
         }

@@ -123,14 +123,20 @@ struct ImageProcessor {
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
               ) else { return nil }
 
-        // Match SwiftUI's top-left coordinate system.
-        context.translateBy(x: 0, y: CGFloat(height))
-        context.scaleBy(x: scale, y: -scale)
-        context.clear(CGRect(x: 0, y: 0, width: size.width, height: size.height))
+        // Clear and composite the previously baked layer in its natural
+        // (correct) orientation under an identity CTM. A baked CGImage is
+        // already upright, so drawing it inside the flipped context below would
+        // flip it a second time and cause previously drawn strokes to flip on
+        // every new touch.
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
 
         if let baseLayer {
-            context.draw(baseLayer, in: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+            context.draw(baseLayer, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
+
+        // Match SwiftUI's top-left coordinate system for newly drawn strokes.
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: scale, y: -scale)
 
         for stroke in strokes {
             drawStroke(points: stroke.points, lineWidth: stroke.lineWidth, color: rgba(from: stroke.color), isEraser: stroke.isEraser, in: context)

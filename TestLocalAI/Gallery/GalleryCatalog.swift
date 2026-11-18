@@ -110,6 +110,34 @@ enum GalleryCatalog {
               }
           }
       }
+      if let chibi = loadCGImage(named: "pikachu") {
+          let columns = 5
+          let rows = 2
+          let tileWidth = chibi.width / columns
+          let tileHeight = chibi.height / rows
+
+          var index = 1
+          for row in 0..<rows {
+              for col in 0..<columns {
+                  let rect = CGRect(
+                      x: col * tileWidth,
+                      y: row * tileHeight,
+                      width: tileWidth,
+                      height: tileHeight
+                  )
+                  if let cropped = chibi.cropping(to: rect) {
+                      results.append(
+                          GalleryPicture(
+                              name: "Pikachu \(index)",
+                              systemImage: "photo",
+                              content: .image(cropped)
+                          )
+                      )
+                      index += 1
+                  }
+              }
+          }
+      }
 
         return results
     }

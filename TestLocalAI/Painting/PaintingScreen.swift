@@ -28,6 +28,7 @@ struct PaintingScreen: View {
     @State private var lastCanvasScale: CGFloat = 1.0
     @State private var canvasContainerSize: CGSize = .zero
     @State private var history: [HistoryEntry] = []
+    @State private var redoStack: [HistoryEntry] = []
     @State private var saveMessage: String?
     @State private var strokesLayerCGImage: CGImage?
     @State private var renderGeneration: Int = 0
@@ -102,6 +103,14 @@ struct PaintingScreen: View {
             .buttonStyle(.bordered)
             .disabled(history.isEmpty)
 
+          Button {
+              redo()
+          } label: {
+              Image(systemName: "arrow.uturn.forward")
+          }
+          .buttonStyle(.bordered)
+          .disabled(redoStack.isEmpty)
+
             Spacer()
 
             Menu {
@@ -135,6 +144,13 @@ struct PaintingScreen: View {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
                 .disabled(history.isEmpty)
+
+                Button {
+                    redo()
+                } label: {
+                    Label("Redo", systemImage: "arrow.uturn.forward")
+                }
+                .disabled(redoStack.isEmpty)
 
                 Button {
                     pushHistory()
@@ -464,6 +480,7 @@ struct PaintingScreen: View {
         canvasScale = 1.0
         lastCanvasScale = 1.0
         history.removeAll()
+        redoStack.removeAll()
         strokesLayerCGImage = nil
     }
 
@@ -502,6 +519,7 @@ struct PaintingScreen: View {
         canvasScale = 1.0
         lastCanvasScale = 1.0
         history.removeAll()
+        redoStack.removeAll()
         strokesLayerCGImage = nil
     }
 
@@ -566,14 +584,30 @@ struct PaintingScreen: View {
         if history.count > 30 {
             history.removeFirst(history.count - 30)
         }
+        redoStack.removeAll()
     }
 
     private func undo() {
         guard let last = history.popLast() else { return }
+        redoStack.append(last)
         strokes = last.strokes
         currentStroke = nil
         workingCGImage = last.workingCGImage
         if let cg = last.workingCGImage {
+            backgroundImage = Image(decorative: cg, scale: 1.0)
+        } else {
+            backgroundImage = nil
+        }
+        rebuildStrokesLayer()
+    }
+
+    private func redo() {
+        guard let entry = redoStack.popLast() else { return }
+        history.append(entry)
+        strokes = entry.strokes
+        currentStroke = nil
+        workingCGImage = entry.workingCGImage
+        if let cg = entry.workingCGImage {
             backgroundImage = Image(decorative: cg, scale: 1.0)
         } else {
             backgroundImage = nil

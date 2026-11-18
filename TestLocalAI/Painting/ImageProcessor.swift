@@ -10,6 +10,16 @@ import AppKit
 struct ImageProcessor {
     private let ciContext = CIContext()
 
+    func cgImage(from data: Data) -> CGImage? {
+        #if canImport(UIKit)
+        return UIImage(data: data)?.cgImage
+        #elseif canImport(AppKit)
+        return NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #else
+        return nil
+        #endif
+    }
+
     func makeBlackAndWhiteCGImage(from data: Data) -> CGImage? {
         guard let ciImage = CIImage(data: data) else { return nil }
         return makeBlackAndWhiteCGImage(from: ciImage)

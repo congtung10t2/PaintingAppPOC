@@ -79,6 +79,10 @@ struct GalleryView: View {
             .navigationDestination(for: GalleryPicture.self) { picture in
                 ColoringTransformer(
                     inputImage: convert(picture),
+                    onOriginal: { original in
+                        onTransformResult(original)
+                        dismiss()
+                    },
                     onComplete: { result in
                         // OK tapped and a result was produced: forward it back to the
                         // Paint screen and return to the previous screen.
@@ -112,6 +116,7 @@ struct GalleryView: View {
                 .font(.caption)
                 .lineLimit(1)
         }
+        .contentShape(Rectangle())
     }
 
     // MARK: - Tab types

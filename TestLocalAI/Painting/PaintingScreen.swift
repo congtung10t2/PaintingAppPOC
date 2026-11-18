@@ -15,7 +15,7 @@ struct PaintingScreen: View {
     @State private var currentStroke: Stroke?
     @State private var selectedColor: Color = .red
     @State private var brushSize: CGFloat = 12
-    @State private var selectedPhotoItem: PhotosPickerItem?
+  @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var backgroundImage: Image?
     @State private var workingCGImage: CGImage?
     @State private var originalCGImage: CGImage?
@@ -61,12 +61,25 @@ struct PaintingScreen: View {
             defaultFilename: "KidsPaint"
         ) { _ in }
         .onChange(of: selectedPhotoItem) { _, newItem in
-            loadPhoto(from: newItem)
+          Task(priority: .userInitiated) {
+            await loadPhoto(from: newItem)
+          }
         }
         .sheet(isPresented: $isShowingGallery) {
             GalleryView(
                 onTransformResult: applyTransformResult,
                 convert: makeGalleryCGImage
+            )
+        }
+        .sheet(isPresented: $isShowingTransformer) {
+            ColoringTransformer(
+                inputImage: transformerImage,
+                onOriginal: { original in
+                    applyTransformResult(original)
+                },
+                onComplete: { result in
+                    applyTransformResult(result)
+                }
             )
         }
         .alert("Save", isPresented: Binding(
@@ -116,6 +129,12 @@ struct PaintingScreen: View {
 
             Spacer()
 
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                Image(systemName: "photo.on.rectangle")
+            }
+            .buttonStyle(.bordered)
+           
+
             Menu {
                 Button {
                     isShowingGallery = true
@@ -123,8 +142,11 @@ struct PaintingScreen: View {
                     Label("Gallery", systemImage: "square.grid.2x2")
                 }
 
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                Button {
+                    transformerImage = originalCGImage
+                    isShowingTransformer = true
+                } label: {
+                    Label("Transform with AI", systemImage: "wand.and.stars")
                 }
 
                 Button {
@@ -265,6 +287,7 @@ struct PaintingScreen: View {
                 .contentShape(Rectangle())
                 .highPriorityGesture(canvasGesture(in: geo.size), including: .all)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
             .scaleEffect(canvasScale)
             #if os(macOS)
             .modifier(ScrollWheelZoomModifier(scale: $canvasScale, lastScale: $lastCanvasScale))
@@ -471,13 +494,7 @@ struct PaintingScreen: View {
     /// B&W policy belongs to the paint screen). Returns `nil` when no image is
     /// produced.
     private func makeGalleryCGImage(from picture: GalleryPicture) -> CGImage? {
-        guard let cg = GalleryCatalog.makeImage(for: picture, size: CGSize(width: 1024, height: 1024)) else { return nil }
-        switch picture.content {
-        case .image:
-            return imageProcessor.makeBlackAndWhiteCGImage(from: cg) ?? cg
-        case .drawing:
-            return cg
-        }
+        return GalleryCatalog.makeImage(for: picture, size: CGSize(width: 1024, height: 1024))
     }
 
     private func selectGalleryPicture(_ picture: GalleryPicture) {
@@ -512,15 +529,14 @@ struct PaintingScreen: View {
         redoStack.removeAll()
         strokesLayerCGImage = nil
         isShowingGallery = false
+        isShowingTransformer = false
     }
-
-    private func loadPhoto(from item: PhotosPickerItem?) {
+@MainActor
+  private func loadPhoto(from item: PhotosPickerItem?) async {
         guard let item else { return }
-        Task {
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                await setBackground(from: data)
-            }
-        }
+          if let data = try? await item.loadTransferable(type: Data.self) {
+            prepareForTransform(from: data)
+          }
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -534,13 +550,20 @@ struct PaintingScreen: View {
         }
 
         if let data = try? Data(contentsOf: url) {
-            Task { await setBackground(from: data) }
+            Task { await prepareForTransform(from: data) }
         }
     }
 
     @MainActor
+    private func prepareForTransform(from data: Data) {
+        guard let cgImage = imageProcessor.cgImage(from: data) else { return }
+        transformerImage = cgImage
+        isShowingTransformer = true
+    }
+
+    @MainActor
     private func setBackground(from data: Data) {
-        guard let cgImage = imageProcessor.makeBlackAndWhiteCGImage(from: data) else { return }
+        guard let cgImage = imageProcessor.cgImage(from: data) else { return }
         originalCGImage = cgImage
         workingCGImage = cgImage
         backgroundImage = Image(decorative: cgImage, scale: 1.0)

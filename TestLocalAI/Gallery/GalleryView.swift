@@ -1,51 +1,63 @@
+//
+//  GalleryView.swift
+//  TestLocalAI
+//
+//  Created by congtungit on 15/11/26.
+//
+
 import SwiftUI
 
+/// The full-screen gallery presented from the Paint screen.
+///
+/// The tab bar mirrors the main navigation's tab structure: "Drawings" shows
+/// gallery line art and "Custom" shows user-provided pictures. Tapping a picture
+/// pushes a **new** `ColoringTransformer` view (a separate navigation destination,
+/// not this gallery) using that picture as its input image. When the user taps
+/// OK in the transformer, the transformed result is forwarded via
+/// `onTransformResult`.
 struct GalleryView: View {
-    let onSelect: (GalleryPicture) -> Void
+    /// Called when a transform result is produced by the `ColoringTransformer`
+    /// (after the user taps OK). The result is the AI-transformed `CGImage`.
+    let onTransformResult: (CGImage) -> Void
+
+    /// Converts a selected picture into the line-art `CGImage` fed to the
+    /// `ColoringTransformer` as its input (includes the black-and-white
+    /// conversion for real `.image` pictures). Provided by `PaintingScreen`.
+    let convert: (GalleryPicture) -> CGImage?
+
     @Environment(\.dismiss) private var dismiss
+
     @State private var selectedTab: GalleryTab = .drawings
 
-    private let columns = [GridItem(.adaptive(minimum: 120), spacing: 16)]
+    private var currentPictures: [GalleryPicture] {
+        switch selectedTab {
+        case .drawings:
+            GalleryCatalog.drawings
+        case .custom:
+            GalleryCatalog.customRealPictures
+        }
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Gallery Tab", selection: $selectedTab) {
+                // Segmented tab picker that mirrors the main navigation structure.
+                Picker("Picture Gallery", selection: $selectedTab) {
                     ForEach(GalleryTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
+                        Label(tab.title, systemImage: tab.systemImage)
+                            .tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding([.horizontal, .top])
+                .padding()
 
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                         ForEach(currentPictures) { picture in
-                            Button {
-                                onSelect(picture)
-                                dismiss()
-                            } label: {
-                                VStack(spacing: 8) {
-                                    if let cg = GalleryCatalog.makeImage(for: picture, size: CGSize(width: 180, height: 180)) {
-                                        Image(decorative: cg, scale: 1)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(height: 100)
-                                            .padding(8)
-                                            .background(.white)
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    }
-
-                                    Text(picture.name)
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.center)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(10)
-                                .background(Color.gray.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                            // Tapping a picture pushes a NEW ColoringTransformer
+                            // (a separate navigation destination), not this gallery.
+                            NavigationLink(value: picture) {
+                                galleryThumbnail(for: picture)
                             }
                             .buttonStyle(.plain)
                         }
@@ -54,9 +66,6 @@ struct GalleryView: View {
                 }
             }
             .navigationTitle("Picture Gallery")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -66,29 +75,65 @@ struct GalleryView: View {
                     }
                 }
             }
+            // Navigate to a fresh ColoringTransformer for each selected picture.
+            .navigationDestination(for: GalleryPicture.self) { picture in
+                ColoringTransformer(
+                    inputImage: convert(picture),
+                    onComplete: { result in
+                        // OK tapped and a result was produced: forward it back to the
+                        // Paint screen and return to the previous screen.
+                        onTransformResult(result)
+                        dismiss()
+                    }
+                )
+            }
         }
     }
 
-    private var currentPictures: [GalleryPicture] {
-        switch selectedTab {
-        case .drawings:
-            return GalleryCatalog.drawings
-        case .realPics:
-            return GalleryCatalog.customRealPictures
+    // MARK: - Gallery UI
+
+    @ViewBuilder
+    private func galleryThumbnail(for picture: GalleryPicture) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary.opacity(0.1))
+
+                if let cg = GalleryCatalog.makeImage(for: picture, size: CGSize(width: 180, height: 180)) {
+                    Image(decorative: cg, scale: 1)
+                        .resizable()
+                        .scaledToFill()
+                }
+            }
+            .frame(height: 100)
+            .clipped()
+
+            Text(picture.name)
+                .font(.caption)
+                .lineLimit(1)
         }
     }
-}
 
-private enum GalleryTab: String, CaseIterable, Identifiable {
-    case drawings
-    case realPics
+    // MARK: - Tab types
 
-    var id: String { rawValue }
+    private enum GalleryTab: String, CaseIterable, Identifiable {
+        case drawings
+        case custom
 
-    var title: String {
-        switch self {
-        case .drawings: return "Drawings"
-        case .realPics: return "Real Pics"
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .drawings: "Drawings"
+            case .custom: "Custom"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .drawings: "pencil.and.outline"
+            case .custom: "photo.on.rectangle"
+            }
         }
     }
 }

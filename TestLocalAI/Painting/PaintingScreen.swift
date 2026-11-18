@@ -20,6 +20,8 @@ struct PaintingScreen: View {
     @State private var workingCGImage: CGImage?
     @State private var originalCGImage: CGImage?
     @State private var isImportingFile = false
+    @State private var isShowingTransformer = false
+    @State private var transformerImage: CGImage?
     @State private var isShowingGallery = false
     @State private var isShowingExporter = false
     @State private var exportDocument: PNGDocument?
@@ -62,9 +64,10 @@ struct PaintingScreen: View {
             loadPhoto(from: newItem)
         }
         .sheet(isPresented: $isShowingGallery) {
-            GalleryView { picture in
-                selectGalleryPicture(picture)
-            }
+            GalleryView(
+                onTransformResult: applyTransformResult,
+                convert: makeGalleryCGImage
+            )
         }
         .alert("Save", isPresented: Binding(
             get: { saveMessage != nil },
@@ -462,15 +465,23 @@ struct PaintingScreen: View {
         }
     }
 
-    private func selectGalleryPicture(_ picture: GalleryPicture) {
-        guard let cg = GalleryCatalog.makeImage(for: picture, size: CGSize(width: 1024, height: 1024)) else { return }
-        let finalCG: CGImage
+    /// Builds the line-art `CGImage` for a gallery picture at 1024×1024, applying
+    /// the black-and-white conversion for real `.image` pictures (kept here in the
+    /// presenter, since `ImageProcessor` is a freely-instantiable struct but the
+    /// B&W policy belongs to the paint screen). Returns `nil` when no image is
+    /// produced.
+    private func makeGalleryCGImage(from picture: GalleryPicture) -> CGImage? {
+        guard let cg = GalleryCatalog.makeImage(for: picture, size: CGSize(width: 1024, height: 1024)) else { return nil }
         switch picture.content {
         case .image:
-            finalCG = imageProcessor.makeBlackAndWhiteCGImage(from: cg) ?? cg
+            return imageProcessor.makeBlackAndWhiteCGImage(from: cg) ?? cg
         case .drawing:
-            finalCG = cg
+            return cg
         }
+    }
+
+    private func selectGalleryPicture(_ picture: GalleryPicture) {
+        guard let finalCG = makeGalleryCGImage(from: picture) else { return }
         originalCGImage = finalCG
         workingCGImage = finalCG
         backgroundImage = Image(decorative: finalCG, scale: 1.0)
@@ -482,6 +493,25 @@ struct PaintingScreen: View {
         history.removeAll()
         redoStack.removeAll()
         strokesLayerCGImage = nil
+    }
+
+    /// Applies a transform result forwarded from the `ColoringTransformer` (after
+    /// the user taps OK) and dismisses the gallery sheet. Mirrors
+    /// `selectGalleryPicture`'s canvas reset so the painted state starts fresh on
+    /// the new image.
+    private func applyTransformResult(_ cg: CGImage) {
+        originalCGImage = cg
+        workingCGImage = cg
+        backgroundImage = Image(decorative: cg, scale: 1.0)
+        strokes.removeAll()
+        currentStroke = nil
+        selectedPhotoItem = nil
+        canvasScale = 1.0
+        lastCanvasScale = 1.0
+        history.removeAll()
+        redoStack.removeAll()
+        strokesLayerCGImage = nil
+        isShowingGallery = false
     }
 
     private func loadPhoto(from item: PhotosPickerItem?) {

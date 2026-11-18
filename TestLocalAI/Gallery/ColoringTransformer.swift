@@ -9,10 +9,25 @@ import SwiftUI
 import ImagePlayground
 
 struct ColoringTransformer: View {
-    @State private var inputImage: CGImage? 
+    @State private var inputImage: CGImage?
     @State private var outputImage: CGImage?
     @State private var isGenerating = false
     @State private var errorMessage: String?
+
+    /// Called when the user chooses to keep the original (untransformed) image.
+    /// When `nil` (e.g. the gallery flow), the "Use Original" button is hidden.
+    var onOriginal: ((CGImage) -> Void)?
+
+    /// Called when the user accepts the AI-transformed output (the "OK" button).
+    var onComplete: ((CGImage) -> Void)?
+
+    init(inputImage: CGImage? = nil,
+         onOriginal: ((CGImage) -> Void)? = nil,
+         onComplete: ((CGImage) -> Void)? = nil) {
+        _inputImage = State(wrappedValue: inputImage)
+        self.onOriginal = onOriginal
+        self.onComplete = onComplete
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -81,7 +96,40 @@ struct ColoringTransformer: View {
                     .foregroundColor(.red)
                     .font(.footnote)
             }
-            
+
+            // OK button — appears once a transform result is ready.
+            Button {
+                if let outputImage {
+                    onComplete?(outputImage)
+                }
+            } label: {
+                Text("OK")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(outputImage == nil || isGenerating)
+            .accessibilityIdentifier("OK button")
+
+            // Offer the untransformed original as an alternative. Only shown when
+            // the caller provides `onOriginal` (e.g. the device/file picker path).
+            if onOriginal != nil {
+                Button {
+                    if let inputImage {
+                        onOriginal?(inputImage)
+                    }
+                } label: {
+                    Text("Use Original")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .disabled(inputImage == nil)
+                .accessibilityIdentifier("Use Original button")
+            }
+
             Spacer()
         }
         .padding()
@@ -95,7 +143,7 @@ struct ColoringTransformer: View {
 
         do {
             // Check if Image Playground / creation is supported on device
-            if #available(iOS 18.2, *) {
+            if #available(iOS 18.4, *) {
                 // Initialize the Image Creator
                 let creator = try await ImageCreator()
                 
@@ -113,7 +161,7 @@ struct ColoringTransformer: View {
                     }
             } else {
                 await MainActor.run {
-                    self.errorMessage = "Image Playground requires a compatible device running iOS 18.2+"
+                    self.errorMessage = "Image Playground requires a compatible device running iOS 18.4+"
                 }
             }
         } catch {

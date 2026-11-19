@@ -15,7 +15,7 @@ struct PaintingScreen: View {
     @State private var currentStroke: Stroke?
     @State private var selectedColor: Color = .red
     @State private var brushSize: CGFloat = 12
-  @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var backgroundImage: Image?
     @State private var workingCGImage: CGImage?
     @State private var originalCGImage: CGImage?
@@ -58,7 +58,7 @@ struct PaintingScreen: View {
             isPresented: $isShowingExporter,
             document: exportDocument,
             contentType: .png,
-            defaultFilename: "KidsPaint"
+            defaultFilename: "KidsPaint\(Date())"
         ) { _ in }
         .onChange(of: selectedPhotoItem) { _, newItem in
           Task(priority: .userInitiated) {
@@ -246,12 +246,13 @@ struct PaintingScreen: View {
 
     private func toolButton(_ tool: PaintTool) -> some View {
         Button {
-            selectedTool = tool
+            // Update brush size first to keep it within the new tool's range
             if tool == .pencil {
                 brushSize = min(max(brushSize, 1), 8)
             } else if tool == .brush || tool == .eraser {
                 brushSize = min(max(brushSize, 4), 40)
             }
+            selectedTool = tool
         } label: {
             Image(systemName: tool.systemImage)
         }
@@ -298,8 +299,6 @@ struct PaintingScreen: View {
             .contentShape(Rectangle())
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .clipped()
-            .padding(.horizontal)
-            .padding(.bottom, 8)
             .onAppear {
                 if canvasContainerSize != geo.size {
                     canvasContainerSize = geo.size
@@ -316,6 +315,8 @@ struct PaintingScreen: View {
                 rebuildStrokesLayer()
             }
         }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 
     private var toolbar: some View {
@@ -330,18 +331,19 @@ struct PaintingScreen: View {
                 .padding(.vertical, 4)
             }
 
-            if selectedTool != .fill {
-                HStack {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: selectedTool == .pencil ? 6 : 8))
-                        .foregroundStyle(.secondary)
-                    Slider(value: $brushSize, in: brushSizeRange)
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: selectedTool == .pencil ? 14 : 20))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal)
+            HStack {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: selectedTool == .pencil ? 6 : 8))
+                    .foregroundStyle(.secondary)
+                Slider(value: $brushSize, in: brushSizeRange)
+                Image(systemName: "circle.fill")
+                    .font(.system(size: selectedTool == .pencil ? 14 : 20))
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal)
+            .frame(height: 30)
+            .opacity(selectedTool != .fill ? 1 : 0)
+            .disabled(selectedTool == .fill)
         }
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
@@ -550,12 +552,12 @@ struct PaintingScreen: View {
         }
 
         if let data = try? Data(contentsOf: url) {
-            Task { await prepareForTransform(from: data) }
+            prepareForTransform(from: data) 
         }
     }
 
     @MainActor
-    private func prepareForTransform(from data: Data) {
+    private func prepareForTransform(from data: Data)  {
         guard let cgImage = imageProcessor.cgImage(from: data) else { return }
         transformerImage = cgImage
         isShowingTransformer = true

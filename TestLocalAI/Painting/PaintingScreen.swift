@@ -34,6 +34,9 @@ struct PaintingScreen: View {
     @State private var saveMessage: String?
     @State private var strokesLayerCGImage: CGImage?
     @State private var renderGeneration: Int = 0
+    /// `true` when the currently selected background image is essentially
+    /// black-and-white (no color), so the "Transform with AI" menu item is hidden.
+    @State private var isSelectedImageGrayscale = false
 
     private let palette: [Color] = [
         .red, .orange, .yellow, .green, .mint, .blue, .purple, .pink, .brown, .black, .white
@@ -142,11 +145,13 @@ struct PaintingScreen: View {
                     Label("Gallery", systemImage: "square.grid.2x2")
                 }
 
-                Button {
-                    transformerImage = originalCGImage
-                    isShowingTransformer = true
-                } label: {
-                    Label("Transform with AI", systemImage: "wand.and.stars")
+                if !isSelectedImageGrayscale {
+                    Button {
+                        transformerImage = originalCGImage
+                        isShowingTransformer = true
+                    } label: {
+                        Label("Transform with AI", systemImage: "wand.and.stars")
+                    }
                 }
 
                 Button {
@@ -202,6 +207,7 @@ struct PaintingScreen: View {
                         originalCGImage = nil
                         selectedPhotoItem = nil
                         strokesLayerCGImage = nil
+                        isSelectedImageGrayscale = false
                     } label: {
                         Label("Remove Picture", systemImage: "xmark.circle")
                     }
@@ -494,6 +500,7 @@ struct PaintingScreen: View {
 
     private func selectGalleryPicture(_ picture: GalleryPicture) {
         guard let finalCG = makeGalleryCGImage(from: picture) else { return }
+        isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(finalCG)
         originalCGImage = finalCG
         workingCGImage = finalCG
         backgroundImage = Image(decorative: finalCG, scale: 1.0)
@@ -512,6 +519,7 @@ struct PaintingScreen: View {
     /// `selectGalleryPicture`'s canvas reset so the painted state starts fresh on
     /// the new image.
     private func applyTransformResult(_ cg: CGImage) {
+        isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(cg)
         originalCGImage = cg
         workingCGImage = cg
         backgroundImage = Image(decorative: cg, scale: 1.0)
@@ -552,6 +560,13 @@ struct PaintingScreen: View {
     @MainActor
     private func prepareForTransform(from data: Data)  {
         guard let cgImage = imageProcessor.cgImage(from: data) else { return }
+        isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(cgImage)
+        // If the selected picture is already black-and-white, skip the "Transform
+        // with AI" popup and place it directly on the canvas.
+        if isSelectedImageGrayscale {
+            setBackground(from: data)
+            return
+        }
         transformerImage = cgImage
         isShowingTransformer = true
     }
@@ -559,6 +574,7 @@ struct PaintingScreen: View {
     @MainActor
     private func setBackground(from data: Data) {
         guard let cgImage = imageProcessor.cgImage(from: data) else { return }
+        isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(cgImage)
         originalCGImage = cgImage
         workingCGImage = cgImage
         backgroundImage = Image(decorative: cgImage, scale: 1.0)
@@ -596,6 +612,7 @@ struct PaintingScreen: View {
             tolerance: 24
         ) {
             pushHistory()
+            isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(filled)
             workingCGImage = filled
             backgroundImage = Image(decorative: filled, scale: 1.0)
             strokes.removeAll()
@@ -691,6 +708,7 @@ struct PaintingScreen: View {
         let lineWidth = stroke.lineWidth * ((sx + sy) / 2)
 
         if let erased = imageProcessor.applyStroke(points: imagePoints, lineWidth: lineWidth, color: (255, 255, 255, 255), to: cg) {
+            isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(erased)
             workingCGImage = erased
             backgroundImage = Image(decorative: erased, scale: 1.0)
         }
@@ -728,6 +746,7 @@ struct PaintingScreen: View {
     private func resetPainting() {
         pushHistory()
         workingCGImage = originalCGImage
+        isSelectedImageGrayscale = originalCGImage.map { imageProcessor.isBlackAndWhite($0) } ?? false
         if let cg = originalCGImage {
             backgroundImage = Image(decorative: cg, scale: 1.0)
         } else {

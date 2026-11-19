@@ -147,7 +147,7 @@ struct ColoringTransformer: View {
         .padding()
         .imagePlaygroundSheet(
             isPresented: $isShowingImagePlayground,
-            concept: "Black and white and use thick draw remove unnescessary detail so we can make color for it",
+            concept: "Black and white only, use thick draw remove unnescessary detail",
             sourceImage: inputImage != nil ? Image(inputImage!, scale: 1.0, label: Text("input")) : nil,
             onCompletion: { url in
                 if let cg = cgImage(from: url) {

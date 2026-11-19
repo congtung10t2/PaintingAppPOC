@@ -39,6 +39,57 @@ struct ImageProcessor {
         return ciContext.createCGImage(output, from: output.extent)
     }
 
+    /// Samples the image and returns `true` when it is essentially monochrome
+    /// (only black, white and shades of gray). Pixels are tested on their RGB
+    /// channels; a pixel counts as colored when its channels differ by more than
+    /// `tolerance` (so small amounts of JPEG noise are ignored). Transparent
+    /// pixels are skipped so a white background can not mask a small subject.
+    func isBlackAndWhite(_ cgImage: CGImage, tolerance: Int = 16, sampleStep: Int = 4) -> Bool {
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerPixel = 4
+        let bytesPerRow = bytesPerPixel * width
+        guard width > 0, height > 0 else { return true }
+
+        var pixels = [UInt8](repeating: 0, count: width * height * bytesPerPixel)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: &pixels,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return false }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var coloredPixelCount = 0
+        var visitedPixelCount = 0
+        for y in stride(from: 0, to: height, by: max(1, sampleStep)) {
+            for x in stride(from: 0, to: width, by: max(1, sampleStep)) {
+                let i = (y * width + x) * bytesPerPixel
+                // Skip fully transparent pixels.
+                if pixels[i + 3] < 8 { continue }
+                visitedPixelCount += 1
+                let r = Int(pixels[i])
+                let g = Int(pixels[i + 1])
+                let b = Int(pixels[i + 2])
+                // A pixel is colored when its channels are not all close together.
+                let maxDiff = max(abs(r - g), abs(g - b), abs(r - b))
+                if maxDiff > tolerance {
+                    coloredPixelCount += 1
+                }
+            }
+        }
+
+        guard visitedPixelCount > 0 else { return true }
+        // Treat the image as black-and-white unless a meaningful share of the
+        // visible pixels is colored.
+        return CGFloat(coloredPixelCount) / CGFloat(visitedPixelCount) < 0.02
+    }
+
     func imageFromData(_ data: Data) -> Image? {
         #if canImport(UIKit)
         guard let uiImage = UIImage(data: data) else { return nil }

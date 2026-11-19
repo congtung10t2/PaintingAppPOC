@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+private let galleryGrayscaleDetector = ImageProcessor()
+
 /// The full-screen gallery presented from the Paint screen.
 ///
 /// The tab bar mirrors the main navigation's tab structure: "Drawings" shows
@@ -82,19 +84,28 @@ struct GalleryView: View {
                 }
             }
             // Navigate to a fresh ColoringTransformer for each selected picture.
+            // If the converted picture is already black-and-white, skip the
+            // "Transform with AI" view and forward it directly to the paint screen.
             .navigationDestination(for: GalleryPicture.self) { picture in
-                ColoringTransformer(
-                    inputImage: convert(picture),
-                    onOriginal: { original in
-                        onTransformResult(original)
-                        dismiss()
-                    },
-                    onComplete: { result in
-                        // OK tapped and a result was produced: forward it back to the
-                        // Paint screen and return to the previous screen.
-                        onTransformResult(result)
-                        dismiss()
-                    }
+                if let cg = convert(picture), galleryGrayscaleDetector.isBlackAndWhite(cg) {
+                    onTransformResult(cg)
+                    dismiss()
+                    return AnyView(Color.clear)
+                }
+                return AnyView(
+                    ColoringTransformer(
+                        inputImage: convert(picture),
+                        onOriginal: { original in
+                            onTransformResult(original)
+                            dismiss()
+                        },
+                        onComplete: { result in
+                            // OK tapped and a result was produced: forward it back to the
+                            // Paint screen and return to the previous screen.
+                            onTransformResult(result)
+                            dismiss()
+                        }
+                    )
                 )
             }
         }

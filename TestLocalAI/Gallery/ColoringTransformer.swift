@@ -11,7 +11,11 @@ import ImagePlayground
 struct ColoringTransformer: View {
     let inputImage: CGImage?
     @State private var outputImage: CGImage?
+    @State private var errorMessage: String?
     @State private var isShowingImagePlayground = false
+    /// Dismisses this popup without applying a result, so the user can pick
+    /// another picture or try a different transform.
+    @Environment(\.dismiss) private var dismiss
  
     /// Called when the user chooses to keep the original (untransformed) image.
     /// When `nil` (e.g. the gallery flow), the "Use Original" button is hidden.
@@ -30,6 +34,19 @@ struct ColoringTransformer: View {
  
     var body: some View {
         VStack(spacing: 20) {
+            // X button to cancel/dismiss this popup without applying a result.
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("Cancel transform button")
+            }
+
             Text("Transform to Painting Art")
                 .font(.headline)
  
@@ -81,6 +98,14 @@ struct ColoringTransformer: View {
                     .background(Color.accentColor)
                     .foregroundColor(.white)
                     .cornerRadius(10)
+            // Show any error that occurred during the last transform attempt.
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
             }
             .disabled(inputImage == nil)
  

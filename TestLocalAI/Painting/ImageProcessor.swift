@@ -73,22 +73,18 @@ struct ImageProcessor {
         return CGRect(origin: origin, size: size)
     }
 
-    func rotateClockwise(_ cgImage: CGImage) -> CGImage? {
-        let width = cgImage.height
-        let height = cgImage.width
-        guard let colorSpace = cgImage.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: cgImage.bitsPerComponent,
-                bytesPerRow: 0,
-                space: colorSpace,
-                bitmapInfo: cgImage.bitmapInfo.rawValue
-              ) else { return nil }
+    func convertToBitmap(_ cgImage: CGImage) -> CGImage? {
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        guard let context = CGContext(
+            data: nil,
+            width: cgImage.width,
+            height: cgImage.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
 
-        context.translateBy(x: CGFloat(width), y: 0)
-        context.rotate(by: -.pi / 2)
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
         return context.makeImage()
     }

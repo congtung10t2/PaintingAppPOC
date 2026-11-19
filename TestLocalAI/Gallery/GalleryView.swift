@@ -27,14 +27,20 @@ struct GalleryView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var selectedTab: GalleryTab = .drawings
+    @State private var selectedTab: GalleryTab = .snowMan
 
     private var currentPictures: [GalleryPicture] {
         switch selectedTab {
-        case .drawings:
-            GalleryCatalog.drawings
-        case .custom:
-            GalleryCatalog.customRealPictures
+        case .snowMan:
+            GalleryCatalog.snowManPictures
+        case .pikachu:
+            GalleryCatalog.pikachuPictures
+        case .chibiGirl:
+            GalleryCatalog.chibiGirlPictures
+        case .chibiBoy:
+            GalleryCatalog.chibiBoyPictures
+        case .witch:
+            GalleryCatalog.witchPictures
         }
     }
 
@@ -122,22 +128,32 @@ struct GalleryView: View {
     // MARK: - Tab types
 
     private enum GalleryTab: String, CaseIterable, Identifiable {
-        case drawings
-        case custom
+        case snowMan
+        case pikachu
+        case chibiGirl
+        case chibiBoy
+        case witch
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .drawings: "Drawings"
-            case .custom: "Custom"
+          
+            case .snowMan: "Snow Man"
+            case .pikachu: "Pikachu"
+            case .chibiGirl: "Chibi Girl"
+            case .chibiBoy: "Chibi Boy"
+            case .witch: "Witch"
             }
         }
 
         var systemImage: String {
             switch self {
-            case .drawings: "pencil.and.outline"
-            case .custom: "photo.on.rectangle"
+            case .snowMan: "person.fill"
+            case .pikachu: "bolt.fill"
+            case .chibiGirl: "person.fill"
+            case .chibiBoy: "figure.standing"
+            case .witch: "sparkles"
             }
         }
     }

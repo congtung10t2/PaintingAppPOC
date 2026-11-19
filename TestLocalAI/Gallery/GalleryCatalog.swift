@@ -19,125 +19,51 @@ enum GalleryCatalog {
 
     static let allPictures: [GalleryPicture] = drawnPictures + customRealPictures
     static let drawings: [GalleryPicture] = drawnPictures
-    static let customRealPictures: [GalleryPicture] = loadCustomRealPictures()
 
-    private static func loadCustomRealPictures() -> [GalleryPicture] {
+    // Per-category lists so each tab shows only its own images.
+    static let pikachuPictures: [GalleryPicture] = loadTiles(from: "pikachu", name: "Pikachu")
+    static let snowManPictures: [GalleryPicture] = loadTiles(from: "snowman", name: "Snow Man")
+    static let chibiGirlPictures: [GalleryPicture] = loadTiles(from: "chibigirl", name: "Chibi Girl")
+    static let chibiBoyPictures: [GalleryPicture] =
+        loadTiles(from: "10pics", name: "Real Picture")
+    static let witchPictures: [GalleryPicture] =
+        loadTiles(from: "witch", name: "Chibi Witch")
+
+    static let customRealPictures: [GalleryPicture] =
+        pikachuPictures + chibiGirlPictures + chibiBoyPictures + witchPictures
+
+    /// Load a 5x2 tile sheet and produce a GalleryPicture for each tile.
+    private static func loadTiles(from imageName: String, name tileName: String) -> [GalleryPicture] {
         var results: [GalleryPicture] = []
 
-        if let sheet = loadCGImage(named: "10pics") {
-            let columns = 5
-            let rows = 2
-            let tileWidth = sheet.width / columns
-            let tileHeight = sheet.height / rows
+        guard let sheet = loadCGImage(named: imageName) else { return results }
 
-            var index = 1
-            for row in 0..<rows {
-                for col in 0..<columns {
-                    let rect = CGRect(
-                        x: col * tileWidth,
-                        y: row * tileHeight,
-                        width: tileWidth,
-                        height: tileHeight
-                    )
-                    if let cropped = sheet.cropping(to: rect) {
-                        results.append(
-                            GalleryPicture(
-                                name: "Real Picture \(index)",
-                                systemImage: "photo",
-                                content: .image(cropped)
-                            )
+        let columns = 5
+        let rows = 2
+        let tileWidth = sheet.width / columns
+        let tileHeight = sheet.height / rows
+
+        var index = 1
+        for row in 0..<rows {
+            for col in 0..<columns {
+                let rect = CGRect(
+                    x: col * tileWidth,
+                    y: row * tileHeight,
+                    width: tileWidth,
+                    height: tileHeight
+                )
+                if let cropped = sheet.cropping(to: rect) {
+                    results.append(
+                        GalleryPicture(
+                            name: "\(tileName) \(index)",
+                            systemImage: "photo",
+                            content: .image(cropped)
                         )
-                        index += 1
-                    }
+                    )
+                    index += 1
                 }
             }
         }
-
-        if let chibi = loadCGImage(named: "chibigirl") {
-            let columns = 5
-            let rows = 2
-            let tileWidth = chibi.width / columns
-            let tileHeight = chibi.height / rows
-
-            var index = 1
-            for row in 0..<rows {
-                for col in 0..<columns {
-                    let rect = CGRect(
-                        x: col * tileWidth,
-                        y: row * tileHeight,
-                        width: tileWidth,
-                        height: tileHeight
-                    )
-                    if let cropped = chibi.cropping(to: rect) {
-                        results.append(
-                            GalleryPicture(
-                                name: "Chibi Girl \(index)",
-                                systemImage: "photo",
-                                content: .image(cropped)
-                            )
-                        )
-                        index += 1
-                    }
-                }
-            }
-        }
-      
-      if let chibi = loadCGImage(named: "witch") {
-          let columns = 5
-          let rows = 2
-          let tileWidth = chibi.width / columns
-          let tileHeight = chibi.height / rows
-
-          var index = 1
-          for row in 0..<rows {
-              for col in 0..<columns {
-                  let rect = CGRect(
-                      x: col * tileWidth,
-                      y: row * tileHeight,
-                      width: tileWidth,
-                      height: tileHeight
-                  )
-                  if let cropped = chibi.cropping(to: rect) {
-                      results.append(
-                          GalleryPicture(
-                              name: "Chibi Witch \(index)",
-                              systemImage: "photo",
-                              content: .image(cropped)
-                          )
-                      )
-                      index += 1
-                  }
-              }
-          }
-      }
-      if let chibi = loadCGImage(named: "pikachu") {
-          let columns = 5
-          let rows = 2
-          let tileWidth = chibi.width / columns
-          let tileHeight = chibi.height / rows
-
-          var index = 1
-          for row in 0..<rows {
-              for col in 0..<columns {
-                  let rect = CGRect(
-                      x: col * tileWidth,
-                      y: row * tileHeight,
-                      width: tileWidth,
-                      height: tileHeight
-                  )
-                  if let cropped = chibi.cropping(to: rect) {
-                      results.append(
-                          GalleryPicture(
-                              name: "Pikachu \(index)",
-                              systemImage: "photo",
-                              content: .image(cropped)
-                          )
-                      )
-                      index += 1
-                  }
-              }
-          }
-      }
 
         return results
     }

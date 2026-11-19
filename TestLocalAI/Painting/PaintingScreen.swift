@@ -679,13 +679,64 @@ struct PaintingScreen: View {
         }
 
         guard canvasContainerSize.width > 0, canvasContainerSize.height > 0 else { return }
+
+        let W = canvasContainerSize.width
+        let H = canvasContainerSize.height
+        let cx = W / 2
+        let cy = H / 2
+
+        // Rotate 90 degrees CW around the canvas center
+        let rotatePoint: (CGPoint) -> CGPoint = { point in
+            let xRot = cx + (cy - point.y)
+            let yRot = cy + (point.x - cx)
+            return CGPoint(x: xRot, y: yRot)
+        }
+
+        // Collect all points to calculate bounding box
+        var minX = CGFloat.infinity
+        var maxX = -CGFloat.infinity
+        var minY = CGFloat.infinity
+        var maxY = -CGFloat.infinity
+
+        let allPoints = strokes.flatMap { $0.points } + (currentStroke?.points ?? [])
+        for p in allPoints {
+            let pRot = rotatePoint(p)
+            minX = min(minX, pRot.x)
+            maxX = max(maxX, pRot.x)
+            minY = min(minY, pRot.y)
+            maxY = max(maxY, pRot.y)
+        }
+
+        guard !allPoints.isEmpty else {
+            rebuildStrokesLayer()
+            return
+        }
+
+        // Translate rotated points so the bounding box center matches the canvas center
+        let offsetX = cx - (minX + maxX) / 2
+        let offsetY = cy - (minY + maxY) / 2
+
+        let finalizePoint: (CGPoint) -> CGPoint = { point in
+            var p = point
+            p.x += offsetX
+            p.y += offsetY
+            // Clamp to canvas bounds
+            p.x = min(max(p.x, 0), W)
+            p.y = min(max(p.y, 0), H)
+            return p
+        }
+
         strokes = strokes.map { stroke in
             var s = stroke
-            s.points = stroke.points.map { point in
-                CGPoint(x: canvasContainerSize.width - point.y, y: point.x)
-            }
+            s.points = stroke.points.map { finalizePoint(rotatePoint($0)) }
             return s
         }
+
+        if var current = currentStroke {
+            current.points = current.points.map { finalizePoint(rotatePoint($0)) }
+            currentStroke = current
+        }
+
         rebuildStrokesLayer()
     }
 

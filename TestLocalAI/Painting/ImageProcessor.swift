@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -12,8 +13,22 @@ struct ImageProcessor {
 
     func cgImage(from data: Data) -> CGImage? {
         #if canImport(UIKit)
-        return UIImage(data: data)?.cgImage
+        if let uiImage = UIImage(data: data) {
+            if let cg = uiImage.cgImage { return cg }
+            if let ci = uiImage.ciImage {
+                return ciContext.createCGImage(ci, from: ci.extent)
+            }
+        }
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            return cgImage
+        }
+        return nil
         #elseif canImport(AppKit)
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            return cgImage
+        }
         return NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         #else
         return nil

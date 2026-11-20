@@ -11,6 +11,11 @@ struct PaintingScreen: View {
         let workingCGImage: CGImage?
     }
 
+    private struct TransformerPayload: Identifiable {
+        let id = UUID()
+        let image: CGImage
+    }
+
     @State private var strokes: [Stroke] = []
     @State private var currentStroke: Stroke?
     @State private var selectedColor: Color = .red
@@ -20,8 +25,7 @@ struct PaintingScreen: View {
     @State private var workingCGImage: CGImage?
     @State private var originalCGImage: CGImage?
     @State private var isImportingFile = false
-    @State private var isShowingTransformer = false
-    @State private var transformerImage: CGImage?
+    @State private var transformerPayload: TransformerPayload?
     @State private var isShowingGallery = false
     @State private var isShowingExporter = false
     @State private var exportDocument: PNGDocument?
@@ -30,7 +34,6 @@ struct PaintingScreen: View {
     @State private var lastCanvasScale: CGFloat = 1.0
     @State private var canvasContainerSize: CGSize = .zero
     @State private var history: [HistoryEntry] = []
-    @State private var redoStack: [HistoryEntry] = []
     @State private var saveMessage: String?
     @State private var strokesLayerCGImage: CGImage?
     @State private var renderGeneration: Int = 0
@@ -74,9 +77,9 @@ struct PaintingScreen: View {
                 convert: makeGalleryCGImage
             )
         }
-        .sheet(isPresented: $isShowingTransformer) {
+        .sheet(item: $transformerPayload) { payload in
             ColoringTransformer(
-                inputImage: transformerImage,
+                inputImage: payload.image,
                 onOriginal: { original in
                     applyTransformResult(original)
                 },
@@ -106,141 +109,129 @@ struct PaintingScreen: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                toolButton(.pencil)
-                toolButton(.brush)
-                toolButton(.fill)
-                toolButton(.eraser)
-            }
-
-            Button {
-                undo()
-            } label: {
-                Image(systemName: "arrow.uturn.backward")
-            }
-            .buttonStyle(.bordered)
-            .disabled(history.isEmpty)
-
-          Button {
-              redo()
-          } label: {
-              Image(systemName: "arrow.uturn.forward")
-          }
-          .buttonStyle(.bordered)
-          .disabled(redoStack.isEmpty)
-
-            Spacer()
-
-            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                Image(systemName: "photo.on.rectangle")
-            }
-            .buttonStyle(.bordered)
-           
-
-            Menu {
-                Button {
-                    isShowingGallery = true
-                } label: {
-                    Label("Gallery", systemImage: "square.grid.2x2")
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    toolButton(.pencil)
+                    toolButton(.brush)
+                    toolButton(.fill)
+                    toolButton(.eraser)
                 }
-
-                if !isSelectedImageGrayscale {
-                    Button {
-                        transformerImage = originalCGImage
-                        isShowingTransformer = true
-                    } label: {
-                        Label("Transform with AI", systemImage: "wand.and.stars")
-                    }
-                }
-
-                Button {
-                    isImportingFile = true
-                } label: {
-                    Label("Choose File", systemImage: "folder")
-                }
-
-                Button {
-                    savePicture()
-                } label: {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
-
-                Divider()
 
                 Button {
                     undo()
                 } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
+                    Image(systemName: "arrow.uturn.backward")
                 }
+                .buttonStyle(.bordered)
                 .disabled(history.isEmpty)
 
-                Button {
-                    redo()
-                } label: {
-                    Label("Redo", systemImage: "arrow.uturn.forward")
-                }
-                .disabled(redoStack.isEmpty)
+                Spacer(minLength: 16)
 
-                Button {
-                    pushHistory()
-                    strokes.removeAll()
-                    currentStroke = nil
-                    rebuildStrokesLayer()
-                } label: {
-                    Label("Clear Drawing", systemImage: "trash")
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "photo.on.rectangle")
                 }
-                .disabled(strokes.isEmpty && currentStroke == nil)
+                .buttonStyle(.bordered)
 
-                Button {
-                    resetPainting()
-                } label: {
-                    Label("Reset Painting", systemImage: "arrow.counterclockwise.circle")
-                }
-                .disabled(strokes.isEmpty && currentStroke == nil && history.isEmpty && workingCGImage == originalCGImage)
+                Menu {
+                    Button {
+                        isShowingGallery = true
+                    } label: {
+                        Label("Gallery", systemImage: "square.grid.2x2")
+                    }
 
-                if backgroundImage != nil {
+                    if !isSelectedImageGrayscale, let original = originalCGImage {
+                        Button {
+                            transformerPayload = TransformerPayload(image: original)
+                        } label: {
+                            Label("Transform with AI", systemImage: "wand.and.stars")
+                        }
+                    }
+
+                    Button {
+                        isImportingFile = true
+                    } label: {
+                        Label("Choose File", systemImage: "folder")
+                    }
+
+                    Button {
+                        savePicture()
+                    } label: {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+
+                    Divider()
+
+                    Button {
+                        undo()
+                    } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(history.isEmpty)
+
                     Button {
                         pushHistory()
-                        backgroundImage = nil
-                        workingCGImage = nil
-                        originalCGImage = nil
-                        selectedPhotoItem = nil
-                        strokesLayerCGImage = nil
-                        isSelectedImageGrayscale = false
+                        strokes.removeAll()
+                        currentStroke = nil
+                        rebuildStrokesLayer()
                     } label: {
-                        Label("Remove Picture", systemImage: "xmark.circle")
+                        Label("Clear Drawing", systemImage: "trash")
                     }
-                }
+                    .disabled(strokes.isEmpty && currentStroke == nil)
 
-                Divider()
+                    Button {
+                        resetPainting()
+                    } label: {
+                        Label("Reset Painting", systemImage: "arrow.counterclockwise.circle")
+                    }
+                    .disabled(strokes.isEmpty && currentStroke == nil && history.isEmpty && workingCGImage == originalCGImage)
 
-                Button {
-                    canvasScale = min(5.0, canvasScale + 0.25)
-                    lastCanvasScale = canvasScale
+                    if backgroundImage != nil {
+                        Button {
+                            pushHistory()
+                            backgroundImage = nil
+                            workingCGImage = nil
+                            originalCGImage = nil
+                            selectedPhotoItem = nil
+                            strokesLayerCGImage = nil
+                            isSelectedImageGrayscale = false
+                        } label: {
+                            Label("Remove Picture", systemImage: "xmark.circle")
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        canvasScale = min(5.0, canvasScale + 0.25)
+                        lastCanvasScale = canvasScale
+                    } label: {
+                        Label("Zoom In", systemImage: "plus.magnifyingglass")
+                    }
+
+                    Button {
+                        canvasScale = max(1.0, canvasScale - 0.25)
+                        lastCanvasScale = canvasScale
+                    } label: {
+                        Label("Zoom Out", systemImage: "minus.magnifyingglass")
+                    }
+
+                    Button {
+                        canvasScale = 1.0
+                        lastCanvasScale = 1.0
+                    } label: {
+                        Label("Reset Zoom", systemImage: "arrow.counterclockwise")
+                    }
                 } label: {
-                    Label("Zoom In", systemImage: "plus.magnifyingglass")
+                    Image(systemName: "ellipsis.circle")
                 }
-
-                Button {
-                    canvasScale = max(1.0, canvasScale - 0.25)
-                    lastCanvasScale = canvasScale
-                } label: {
-                    Label("Zoom Out", systemImage: "minus.magnifyingglass")
-                }
-
-                Button {
-                    canvasScale = 1.0
-                    lastCanvasScale = 1.0
-                } label: {
-                    Label("Reset Zoom", systemImage: "arrow.counterclockwise")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
+            .padding(.horizontal)
+            .frame(minWidth: canvasContainerSize.width > 0 ? canvasContainerSize.width + 32 : nil)
         }
-        .padding()
+        .scrollBounceBehavior(.basedOnSize)
+        .padding(.vertical, 8)
     }
 
     private func toolButton(_ tool: PaintTool) -> some View {
@@ -510,7 +501,6 @@ struct PaintingScreen: View {
         canvasScale = 1.0
         lastCanvasScale = 1.0
         history.removeAll()
-        redoStack.removeAll()
         strokesLayerCGImage = nil
     }
 
@@ -529,17 +519,17 @@ struct PaintingScreen: View {
         canvasScale = 1.0
         lastCanvasScale = 1.0
         history.removeAll()
-        redoStack.removeAll()
         strokesLayerCGImage = nil
         isShowingGallery = false
-        isShowingTransformer = false
+        transformerPayload = nil
     }
 @MainActor
   private func loadPhoto(from item: PhotosPickerItem?) async {
         guard let item else { return }
-          if let data = try? await item.loadTransferable(type: Data.self) {
+        defer { selectedPhotoItem = nil }
+        if let data = try? await item.loadTransferable(type: Data.self) {
             prepareForTransform(from: data)
-          }
+        }
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -567,8 +557,7 @@ struct PaintingScreen: View {
             setBackground(from: data)
             return
         }
-        transformerImage = cgImage
-        isShowingTransformer = true
+        transformerPayload = TransformerPayload(image: cgImage)
     }
 
     @MainActor
@@ -583,7 +572,6 @@ struct PaintingScreen: View {
         canvasScale = 1.0
         lastCanvasScale = 1.0
         history.removeAll()
-        redoStack.removeAll()
         strokesLayerCGImage = nil
     }
 
@@ -649,30 +637,14 @@ struct PaintingScreen: View {
         if history.count > 30 {
             history.removeFirst(history.count - 30)
         }
-        redoStack.removeAll()
     }
 
     private func undo() {
         guard let last = history.popLast() else { return }
-        redoStack.append(last)
         strokes = last.strokes
         currentStroke = nil
         workingCGImage = last.workingCGImage
         if let cg = last.workingCGImage {
-            backgroundImage = Image(decorative: cg, scale: 1.0)
-        } else {
-            backgroundImage = nil
-        }
-        rebuildStrokesLayer()
-    }
-
-    private func redo() {
-        guard let entry = redoStack.popLast() else { return }
-        history.append(entry)
-        strokes = entry.strokes
-        currentStroke = nil
-        workingCGImage = entry.workingCGImage
-        if let cg = entry.workingCGImage {
             backgroundImage = Image(decorative: cg, scale: 1.0)
         } else {
             backgroundImage = nil
@@ -690,7 +662,7 @@ struct PaintingScreen: View {
         commitStrokeToLayer(stroke)
 
         // If there is no bitmap yet, create one from current composite so fills on blank canvas can be erased.
-        var baseImage = workingCGImage ?? compositeImageForEditing()
+        let baseImage = workingCGImage ?? compositeImageForEditing()
         guard let cg = baseImage else { return }
 
         let imageArea = CGRect(origin: .zero, size: containerSize).insetBy(dx: 12, dy: 12)

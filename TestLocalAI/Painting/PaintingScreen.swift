@@ -242,6 +242,11 @@ struct PaintingScreen: View {
             } else if tool == .brush || tool == .eraser {
                 brushSize = min(max(brushSize, 4), 40)
             }
+            // Drop any in-progress stroke so a half-drawn stroke can't bleed into the
+            // tool we're switching to (which previously caused the canvas to glitch on switch).
+            if currentStroke != nil {
+                currentStroke = nil
+            }
             selectedTool = tool
         } label: {
             Image(systemName: tool.systemImage)
@@ -271,6 +276,11 @@ struct PaintingScreen: View {
                 }
 
                 Canvas { context, _ in
+                    // The live overlay draws the in-progress stroke in the same screen
+                    // coordinates used to commit it, so what you see while drawing matches
+                    // where the stroke lands. Eraser strokes are drawn white on the overlay
+                    // so the eraser visibly "erases" as you drag, exactly like a pen draws —
+                    // on end the eraser is committed to the stroke layer the same way.
                     if let currentStroke {
                         draw(currentStroke, in: &context)
                     }
@@ -291,18 +301,12 @@ struct PaintingScreen: View {
             .clipped()
             .onAppear {
                 if canvasContainerSize != geo.size {
-                    canvasContainerSize = geo.size
-                    strokesLayerCGImage = nil
-                    renderGeneration += 1
-                    rebuildStrokesLayer()
+                    rebuildForNewSize(geo.size)
                 }
             }
             .onChange(of: geo.size) { _, newSize in
                 guard canvasContainerSize != newSize else { return }
-                canvasContainerSize = newSize
-                strokesLayerCGImage = nil
-                renderGeneration += 1
-                rebuildStrokesLayer()
+                rebuildForNewSize(newSize)
             }
         }
         .padding(.horizontal)
@@ -454,27 +458,17 @@ struct PaintingScreen: View {
             }
         }
 
-        if stroke.isEraser {
-            var eraserContext = context
-            eraserContext.blendMode = .destinationOut
-            if isDot {
-                eraserContext.fill(path, with: .color(.black))
-            } else {
-                eraserContext.stroke(
-                    path,
-                    with: .color(.black),
-                    style: StrokeStyle(lineWidth: stroke.lineWidth, lineCap: .round, lineJoin: .round)
-                )
-            }
-            return
-        }
-
+        // The eraser paints white. On the white canvas that is equivalent to erasing,
+        // and on a background image it wipes the picture back to white, matching the
+        // bitmap bake in applyEraserStroke. (.destinationOut removed the white background
+        // instead of the content, which is why the eraser looked wrong.)
+        let paintColor: Color = stroke.isEraser ? .white : stroke.color
         if isDot {
-            context.fill(path, with: .color(stroke.color))
+            context.fill(path, with: .color(paintColor))
         } else {
             context.stroke(
                 path,
-                with: .color(stroke.color),
+                with: .color(paintColor),
                 style: StrokeStyle(lineWidth: stroke.lineWidth, lineCap: .round, lineJoin: .round)
             )
         }
@@ -654,23 +648,34 @@ struct PaintingScreen: View {
 
     @MainActor
     private func applyEraserStroke(_ stroke: Stroke, in containerSize: CGSize) {
-        // Erase drawn strokes on the stroke layer and also erase fills/paint on the bitmap image.
+        // The eraser works on the vector stroke layer, in the same screen coordinates as the
+        // pen, so it erases exactly where the finger is — no "zoom"/teleport. It paints white
+        // onto the stroke layer (which sits above the photo and the painted strokes), so white
+        // visually covers what was drawn there.
         pushHistory()
-
-        // Keep eraser stroke for vector stroke-layer erasing.
         strokes.append(stroke)
+        // Bump the generation so any in-flight async rebuild is stale and cannot clobber the
+        // commit that follows, then commit synchronously on the same path as the pen.
+        renderGeneration += 1
         commitStrokeToLayer(stroke)
+        currentStroke = nil
 
-        // If there is no bitmap yet, create one from current composite so fills on blank canvas can be erased.
-        let baseImage = workingCGImage ?? compositeImageForEditing()
-        guard let cg = baseImage else { return }
-
+        // When a photo is behind the canvas, also bake the erase into the background bitmap so
+        // the eraser can remove the photo itself (not just the painted strokes on top). This is
+        // the only case that needs a coordinate transform: map the screen-space stroke onto the
+        // photo's aspect-fit rect. The transform goes the correct direction (screen -> image),
+        // so the bake lands where the user touched instead of jumping.
+        guard let cg = workingCGImage else { return }
         let imageArea = CGRect(origin: .zero, size: containerSize).insetBy(dx: 12, dy: 12)
         let fittedRect = imageProcessor.aspectFitRect(
             imageSize: CGSize(width: cg.width, height: cg.height),
             in: imageArea
         )
         guard fittedRect.width > 0, fittedRect.height > 0 else { return }
+        guard fittedRect.insetBy(dx: 0.5, dy: 0.5).contains(stroke.points.first ?? .zero) else {
+            // The erase started outside the photo; it only affected the stroke layer.
+            return
+        }
 
         let sx = CGFloat(cg.width) / fittedRect.width
         let sy = CGFloat(cg.height) / fittedRect.height
@@ -679,11 +684,25 @@ struct PaintingScreen: View {
         }
         let lineWidth = stroke.lineWidth * ((sx + sy) / 2)
 
+        // Painting white over the photo acts as an erase, since the canvas sits on white.
         if let erased = imageProcessor.applyStroke(points: imagePoints, lineWidth: lineWidth, color: (255, 255, 255, 255), to: cg) {
             isSelectedImageGrayscale = imageProcessor.isBlackAndWhite(erased)
             workingCGImage = erased
+            originalCGImage = nil
             backgroundImage = Image(decorative: erased, scale: 1.0)
         }
+    }
+
+    /// Clears the stroke layer immediately and schedules a fresh, race-free rebuild.
+    /// The immediate clear prevents a stale (or partially rendered) layer from showing
+    /// through while the async render runs, which is what made the canvas appear to
+    /// glitch when switching between tools.
+    private func rebuildForNewSize(_ size: CGSize) {
+        canvasContainerSize = size
+        // Remove the old layer right away so a stale render can't flash on screen.
+        strokesLayerCGImage = nil
+        renderGeneration += 1
+        rebuildStrokesLayer()
     }
 
     private func rebuildStrokesLayer() {
@@ -691,14 +710,17 @@ struct PaintingScreen: View {
             strokesLayerCGImage = nil
             return
         }
+        // Take a snapshot of the generation this render is for; only the newest render
+        // is allowed to publish its result so a slow rebuild can't overwrite a newer one.
+        let generation = renderGeneration
         let size = canvasContainerSize
         let strokesToRender = strokes
         let processor = imageProcessor
         DispatchQueue.global(qos: .userInitiated).async {
             let layer = processor.renderStrokesLayer(size: size, strokes: strokesToRender)
             DispatchQueue.main.async {
-                // Apply only if state still matches what we rendered for.
-                if self.canvasContainerSize == size {
+                // Apply only if this is still the most recent rebuild request.
+                if self.renderGeneration == generation && self.canvasContainerSize == size {
                     self.strokesLayerCGImage = layer
                 }
             }
@@ -707,6 +729,12 @@ struct PaintingScreen: View {
 
     private func commitStrokeToLayer(_ stroke: Stroke) {
         guard canvasContainerSize.width > 0, canvasContainerSize.height > 0 else { return }
+        // Bump the generation first so any async rebuild launched before this commit
+        // is now stale and cannot overwrite the result we are about to publish. This
+        // closes the race where a slow background render (from onAppear/resize/undo)
+        // returns after a synchronous commit and clobbers it — the "stroke vanishes /
+        // jumps after finishing" glitch.
+        renderGeneration += 1
         // Immediate incremental render to avoid end-of-stroke flicker.
         if let updated = imageProcessor.renderStrokesLayer(size: canvasContainerSize, strokes: [stroke], baseLayer: strokesLayerCGImage) {
             strokesLayerCGImage = updated
@@ -828,28 +856,18 @@ private struct CanvasExportView: View {
                         }
                     }
 
-                    if stroke.isEraser {
-                        var eraserContext = context
-                        eraserContext.blendMode = .destinationOut
-                        if isDot {
-                            eraserContext.fill(path, with: .color(.black))
-                        } else {
-                            eraserContext.stroke(
-                                path,
-                                with: .color(.black),
-                                style: StrokeStyle(lineWidth: stroke.lineWidth, lineCap: .round, lineJoin: .round)
-                            )
-                        }
+                    // Eraser strokes are baked white onto the background (see
+                    // applyEraserStroke), so by the time export runs they are normal
+                    // white strokes; render them the same way as any other stroke.
+                    let paintColor: Color = stroke.isEraser ? .white : stroke.color
+                    if isDot {
+                        context.fill(path, with: .color(paintColor))
                     } else {
-                        if isDot {
-                            context.fill(path, with: .color(stroke.color))
-                        } else {
-                            context.stroke(
-                                path,
-                                with: .color(stroke.color),
-                                style: StrokeStyle(lineWidth: stroke.lineWidth, lineCap: .round, lineJoin: .round)
-                            )
-                        }
+                        context.stroke(
+                            path,
+                            with: .color(paintColor),
+                            style: StrokeStyle(lineWidth: stroke.lineWidth, lineCap: .round, lineJoin: .round)
+                        )
                     }
                 }
             }

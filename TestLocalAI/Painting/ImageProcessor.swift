@@ -175,6 +175,26 @@ struct ImageProcessor {
         return context.makeImage()
     }
 
+    /// Creates an opaque white bitmap of the requested size. Used as the eraser's
+    /// starting surface when there is no background image yet.
+    func makeWhiteBitmap(size: CGSize) -> CGImage? {
+        let width = max(Int(size.width), 1)
+        let height = max(Int(size.height), 1)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              ) else { return nil }
+        context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
     func renderStrokesLayer(size: CGSize, strokes: [Stroke]) -> CGImage? {
         renderStrokesLayer(size: size, strokes: strokes, baseLayer: nil)
     }
@@ -231,9 +251,12 @@ struct ImageProcessor {
         )
 
         if isEraser {
-            context.setBlendMode(.clear)
-            context.setStrokeColor(red: 0, green: 0, blue: 0, alpha: 1)
-            context.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+            // Paint white: on the white stroke layer this is invisible, and the eraser's
+            // real effect is baked onto the background bitmap in applyEraserStroke. Using
+            // .clear/.destinationOut here removed the white background instead of the content.
+            context.setBlendMode(.normal)
+            context.setStrokeColor(red: 1, green: 1, blue: 1, alpha: 1)
+            context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
         } else {
             context.setBlendMode(.normal)
             context.setStrokeColor(cgColor)

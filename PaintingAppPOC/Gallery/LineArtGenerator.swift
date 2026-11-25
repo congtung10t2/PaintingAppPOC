@@ -1,6 +1,6 @@
 //
 //  LineArtGenerator.swift
-//  TestLocalAI
+//  PaintingAppPOC
 //
 //  Uses the on-device Apple Intelligence model (Foundation Models) to describe
 //  how a picture reads as black-and-white line art for a coloring page. The app

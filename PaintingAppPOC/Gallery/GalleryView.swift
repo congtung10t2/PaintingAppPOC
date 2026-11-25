@@ -1,6 +1,6 @@
 //
 //  GalleryView.swift
-//  TestLocalAI
+//  PaintingAppPOC
 //
 //  Created by congtungit on 15/11/26.
 //

@@ -11,20 +11,20 @@
     ],
   },
   "files": [
-    { "kind": "folder", "path": "TestLocalAI", "target-membership": [ "TestLocalAI" ] },
+    { "kind": "folder", "path": "PaintingAppPOC", "target-membership": [ "PaintingAppPOC" ] },
     {
       "kind": "group",
       "name": "Products",
       "children": [
-        { "path": "<PRODUCTS>/TestLocalAI.app", "id": "000000000000000000000120", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/PaintingAppPOC.app", "id": "000000000000000000000120", "type": "wrapper.application", "index": false },
       ],
     },
   ],
   "targets": [
     {
-      "name": "TestLocalAI",
+      "name": "PaintingAppPOC",
       "id": "000000000000000100000000",
-      "product": "Products/TestLocalAI.app",
+      "product": "Products/PaintingAppPOC.app",
       "product-type": "application",
       "build-phases": [
         "compile-sources",
@@ -71,7 +71,7 @@
         "LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]": "@executable_path/../Frameworks",
         "MACOSX_DEPLOYMENT_TARGET": "27.0",
         "MARKETING_VERSION": "1.0",
-        "PRODUCT_BUNDLE_IDENTIFIER": "com.congtungit.TestLocalAI",
+        "PRODUCT_BUNDLE_IDENTIFIER": "com.congtungit.PaintingAppPOC",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "REGISTER_APP_GROUPS": "YES",
         "SDKROOT": "auto",

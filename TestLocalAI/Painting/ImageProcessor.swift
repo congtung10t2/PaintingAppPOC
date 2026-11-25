@@ -54,6 +54,31 @@ struct ImageProcessor {
         return ciContext.createCGImage(output, from: output.extent)
     }
 
+    /// Renders the outline lines that turn a picture into a coloring page:
+    /// black outlines of the picture's objects on a white background. The
+    /// empty space around the outlines stays blank so a user can paint over
+    /// it ("colorable").
+    func lineArt(from cgImage: CGImage) -> CGImage? {
+        // Desaturate so the edges are traced on luminance rather than color.
+        let gray = CIFilter.colorControls()
+        gray.inputImage = CIImage(cgImage: cgImage)
+        gray.saturation = 0
+        guard let grayImage = gray.outputImage else { return nil }
+
+        let overlay = CIFilter.lineOverlay()
+        overlay.inputImage = grayImage
+        overlay.nrSharpness = 0.71
+        overlay.edgeIntensity = 1
+        overlay.threshold = 0.1
+        guard let lines = overlay.outputImage else { return nil }
+
+        // Composite the traced lines over a white page instead of leaving the
+        // rest of the image transparent.
+        let whitePage = CIImage(color: CIColor.white).cropped(to: lines.extent)
+        let onPage = lines.composited(over: whitePage)
+        return ciContext.createCGImage(onPage, from: onPage.extent)
+    }
+
     /// Samples the image and returns `true` when it is essentially monochrome
     /// (only black, white and shades of gray). Pixels are tested on their RGB
     /// channels; a pixel counts as colored when its channels differ by more than

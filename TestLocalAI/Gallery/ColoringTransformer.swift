@@ -6,13 +6,15 @@
 //
  
 import SwiftUI
-import ImagePlayground
  
 struct ColoringTransformer: View {
     let inputImage: CGImage?
     @State private var outputImage: CGImage?
     @State private var errorMessage: String?
-    @State private var isShowingImagePlayground = false
+    /// True while the on-device model is describing the picture.
+    @State private var isTransforming = false
+    /// The model's plan for the coloring page, shown as a caption under the result.
+    @State private var planText: String?
     /// Dismisses this popup without applying a result, so the user can pick
     /// another picture or try a different transform.
     @Environment(\.dismiss) private var dismiss
@@ -47,7 +49,7 @@ struct ColoringTransformer: View {
                 .accessibilityIdentifier("Cancel transform button")
             }
 
-            Text("Transform to Painting Art")
+            Text("Coloring Page")
                 .font(.headline)
  
             HStack(spacing: 15) {
@@ -80,18 +82,23 @@ struct ColoringTransformer: View {
                             .frame(width: 180, height: 180)
                             .overlay(
                                 Group {
-                                    Text("Tap Transform")
+                                    Text("Tap Generate")
                                         .font(.caption)
                                 }
                             )
                     }
+
+                    if let planText {
+                        Text(planText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
             }
  
-            Button(action: {
-                isShowingImagePlayground = true
-            }) {
-                Text("Transform with AI")
+            Button(action: runTransform) {
+                Text(isTransforming ? "Generating…" : "Generate Coloring Page")
                     .bold()
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -107,7 +114,7 @@ struct ColoringTransformer: View {
                     .padding(.horizontal)
             }
             }
-            .disabled(inputImage == nil)
+            .disabled(inputImage == nil || isTransforming)
  
             // OK button — appears once a transform result is ready.
             Button {
@@ -145,27 +152,25 @@ struct ColoringTransformer: View {
             Spacer()
         }
         .padding()
-        .imagePlaygroundSheet(
-            isPresented: $isShowingImagePlayground,
-            concept: "Black and white only, use thick draw remove unnescessary detail",
-            sourceImage: inputImage != nil ? Image(inputImage!, scale: 1.0, label: Text("input")) : nil,
-            onCompletion: { url in
-                if let cg = cgImage(from: url) {
-                    outputImage = cg
-                }
-            }
-        )
-        .imagePlaygroundGenerationStyle(.illustration)
     }
- 
-    private func cgImage(from url: URL) -> CGImage? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        #if canImport(UIKit)
-        return UIImage(data: data)?.cgImage
-        #elseif canImport(AppKit)
-        return NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        #else
-        return nil
-        #endif
+
+    /// Starts the Foundation Models-based transform: the on-device model
+    /// describes the picture as black-and-white line art, then Core Image
+    /// renders the colorable page image.
+    private func runTransform() {
+        guard let inputImage else { return }
+        Task {
+            isTransforming = true
+            defer { isTransforming = false }
+            do {
+                let result = try await LineArtGenerator().generate(from: inputImage)
+                outputImage = result.lineArt
+                planText = [result.plan.subject, result.plan.outlineStyle, result.plan.instructions]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " · ")
+            } catch {
+                errorMessage = "AI transform unavailable on this device."
+            }
+        }
     }
 }
